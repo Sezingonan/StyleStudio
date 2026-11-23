@@ -1,0 +1,7 @@
+[
+  {"id": 1001, "name": "Beyaz Tisort", "category": "Top", "color": "White", "style": "Casual", "season": "All", "price": 300.0, "imagePath": "images/white_tshirt.jpg", "productUrl": "", "isUserAdded": false},
+  {"id": 1002, "name": "Siyah Pantolon", "category": "Bottom", "color": "Black", "style": "Casual", "season": "All", "price": 900.0, "imagePath": "images/black_pants.jpg", "productUrl": "", "isUserAdded": false},
+  {"id": 1003, "name": "Palazzo Pantolon", "category": "Bottom", "color": "Black", "style": "Casual", "season": "Summer", "price": 1200.0, "imagePath": "images/palazzo.jpg", "productUrl": "", "isUserAdded": false},
+  {"id": 1004, "name": "Kahverengi Bot", "category": "Shoes", "color": "Brown", "style": "Classic", "season": "Winter", "price": 2100.0, "imagePath": "images/brown_boot.jpg", "productUrl": "", "isUserAdded": false},
+  {"id": 1005, "name": "Bej Pantolon", "category": "Bottom", "color": "Beige", "style": "Classic", "season": "Spring", "price": 850.0, "imagePath": "images/beige_pants.jpg", "productUrl": "", "isUserAdded": false}
+]
