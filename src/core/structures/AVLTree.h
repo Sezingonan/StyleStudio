@@ -32,6 +32,14 @@ public:
         return inserted;
     }
 
+    // Siler. Anahtar yoksa false döner.
+    bool erase(const Key& key) {
+        bool erased = false;
+        root_ = eraseNode(std::move(root_), key, erased);
+        if (erased) --size_;
+        return erased;
+    }
+
     // Anahtarı arar. Bulursa değere işaretçi, bulamazsa nullptr döner.
     // İşaretçi, ağaç değiştirilene (insert/erase) kadar geçerlidir.
     const Value* find(const Key& key) const {
@@ -130,6 +138,37 @@ private:
             node->right = insertNode(std::move(node->right), key, value, inserted);
         } else {
             return node;  // aynı anahtar: değişiklik yok
+        }
+        return rebalance(std::move(node));
+    }
+
+    // Alt ağacın en küçük (en soldaki) düğümü.
+    static const Node* minNode(const Node* node) {
+        while (node->left) node = node->left.get();
+        return node;
+    }
+
+    static std::unique_ptr<Node> eraseNode(std::unique_ptr<Node> node,
+                                           const Key& key, bool& erased) {
+        if (!node) return nullptr;  // anahtar yok
+
+        if (key < node->key) {
+            node->left = eraseNode(std::move(node->left), key, erased);
+        } else if (node->key < key) {
+            node->right = eraseNode(std::move(node->right), key, erased);
+        } else {
+            // Silinecek düğüm bulundu.
+            erased = true;
+            if (!node->left) return std::move(node->right);   // 0 ya da 1 çocuk
+            if (!node->right) return std::move(node->left);   // 1 çocuk
+
+            // 2 çocuk: sağ alt ağacın en küçüğünü (successor) bul,
+            // verisini bu düğüme kopyala, sonra o düğümü sağdan sil.
+            const Node* successor = minNode(node->right.get());
+            node->key = successor->key;
+            node->value = successor->value;
+            bool dummy = false;
+            node->right = eraseNode(std::move(node->right), node->key, dummy);
         }
         return rebalance(std::move(node));
     }
