@@ -6,3 +6,4 @@ function(add_style_test name)
 endfunction()
 
 add_style_test(test_smoke)
+add_style_test(test_enums)
