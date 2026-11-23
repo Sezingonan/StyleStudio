@@ -7,3 +7,4 @@ endfunction()
 
 add_style_test(test_smoke)
 add_style_test(test_enums)
+add_style_test(test_clothing)
