@@ -32,6 +32,25 @@ public:
         return inserted;
     }
 
+    // Anahtarı arar. Bulursa değere işaretçi, bulamazsa nullptr döner.
+    // İşaretçi, ağaç değiştirilene (insert/erase) kadar geçerlidir.
+    const Value* find(const Key& key) const {
+        const Node* node = findNode(root_.get(), key);
+        return node ? &node->value : nullptr;
+    }
+
+    Value* find(const Key& key) {
+        return const_cast<Value*>(static_cast<const AVLTree*>(this)->find(key));
+    }
+
+    bool contains(const Key& key) const { return find(key) != nullptr; }
+
+    // Anahtarları artan sırayla gezer, her düğüme fn(key, value) uygular.
+    template <typename Func>
+    void inOrder(Func fn) const {
+        inOrderNode(root_.get(), fn);
+    }
+
     // Test için: ağaçtaki her düğümde |denge faktörü| <= 1 mi?
     bool isBalanced() const { return checkBalanced(root_.get()); }
 
@@ -61,8 +80,8 @@ private:
     // Sağa rotasyon: y'nin sol çocuğu x yukarı çıkar. Yeni kökü döndürür.
     static std::unique_ptr<Node> rotateRight(std::unique_ptr<Node> y) {
         std::unique_ptr<Node> x = std::move(y->left);
-        y->left = std::move(x->right);  // B alt ağacı y'nin soluna geçer
-        updateHeight(y.get());          // önce alttaki (y), sonra üstteki (x)
+        y->left = std::move(x->right);
+        updateHeight(y.get());
         x->right = std::move(y);
         updateHeight(x.get());
         return x;
@@ -113,6 +132,28 @@ private:
             return node;  // aynı anahtar: değişiklik yok
         }
         return rebalance(std::move(node));
+    }
+
+    // Döngüyle arama: her adımda sola ya da sağa inilir.
+    static const Node* findNode(const Node* node, const Key& key) {
+        while (node) {
+            if (key < node->key) {
+                node = node->left.get();
+            } else if (node->key < key) {
+                node = node->right.get();
+            } else {
+                return node;
+            }
+        }
+        return nullptr;
+    }
+
+    template <typename Func>
+    static void inOrderNode(const Node* node, Func& fn) {
+        if (!node) return;
+        inOrderNode(node->left.get(), fn);
+        fn(node->key, node->value);
+        inOrderNode(node->right.get(), fn);
     }
 
     static bool checkBalanced(const Node* node) {
