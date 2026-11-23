@@ -5,3 +5,6 @@ add_library(style_core STATIC
 )
 
 target_include_directories(style_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+# nlohmann/json: tek header'lık üçüncü parti kütüphane
+target_include_directories(style_core PUBLIC ${CMAKE_SOURCE_DIR}/third_party)
