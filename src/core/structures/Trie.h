@@ -4,6 +4,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "text/Normalize.h"
@@ -36,6 +37,41 @@ public:
         return true;
     }
 
+    // (ad, id) çiftini siler. Çift yoksa false döner.
+    // Boşalan düğümler budanır, böylece silinen adın yolu ağaçta kalmaz.
+    bool remove(const std::string& name, int id) {
+        const std::string key = normalize(name);
+        if (key.empty()) return false;
+
+        // Kökten başlayıp (ebeveyn, harf) çiftlerini kaydederek in.
+        std::vector<std::pair<Node*, char>> path;
+        Node* node = &root_;
+        for (char ch : key) {
+            auto it = node->children.find(ch);
+            if (it == node->children.end()) return false;
+            path.emplace_back(node, ch);
+            node = it->second.get();
+        }
+
+        auto pos = std::find(node->ids.begin(), node->ids.end(), id);
+        if (pos == node->ids.end()) return false;
+        node->ids.erase(pos);
+        --size_;
+
+        // Aşağıdan yukarı: ID'si de çocuğu da olmayan düğümü ebeveyninden kopar.
+        for (std::size_t i = path.size(); i-- > 0;) {
+            Node* parent = path[i].first;
+            char ch = path[i].second;
+            const Node* child = parent->children.find(ch)->second.get();
+            if (child->ids.empty() && child->children.empty()) {
+                parent->children.erase(ch);
+            } else {
+                break;  // bu düğüm hâlâ gerekli, üsttekiler de gerekli
+            }
+        }
+        return true;
+    }
+
     // Bu önekle başlayan en az bir kayıtlı ad var mı?
     // Boş önek: Trie boş değilse true.
     bool startsWith(const std::string& prefix) const {
@@ -51,6 +87,21 @@ public:
         const Node* node = walk(key);
         if (!node || node->ids.empty()) return nullptr;
         return &node->ids;
+    }
+
+    // Bu önekle başlayan adların ID'lerinden en fazla k tanesini döner.
+    // Sıra: adlar alfabetik (kısa ad önce), aynı adlı ürünler ekleme sırasıyla.
+    // Boş önek: tüm adlardan başlar. k == 0 ise boş liste.
+    std::vector<int> suggest(const std::string& prefix, std::size_t k) const {
+        std::vector<int> result;
+        if (k == 0) return result;
+
+        const std::string key = normalize(prefix);
+        const Node* start = key.empty() ? &root_ : walk(key);
+        if (!start) return result;
+
+        collect(start, k, result);
+        return result;
     }
 
     // Kayıtlı (ad, id) çifti sayısı.
@@ -72,6 +123,19 @@ private:
             node = it->second.get();
         }
         return node;
+    }
+
+    // Derinlik öncelikli gezinti: önce düğümün kendi ID'leri, sonra çocuklar.
+    // out.size() k'ya ulaşınca durur.
+    static void collect(const Node* node, std::size_t k, std::vector<int>& out) {
+        for (int id : node->ids) {
+            if (out.size() >= k) return;
+            out.push_back(id);
+        }
+        for (const auto& entry : node->children) {
+            if (out.size() >= k) return;
+            collect(entry.second.get(), k, out);
+        }
     }
 
     Node root_;
