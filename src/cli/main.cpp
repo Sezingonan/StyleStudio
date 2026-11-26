@@ -1,24 +1,287 @@
+#include <cstddef>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
+#include <vector>
 
 #include "Version.h"
+#include "managers/CatalogQuery.h"
 #include "managers/ClothingManager.h"
+#include "managers/OutfitEditor.h"
+#include "managers/OutfitManager.h"
+#include "managers/RecommendationManager.h"
+#include "managers/ReviewQueue.h"
 #include "models/ClothingCollection.h"
 #include "storage/JsonManager.h"
+#include "storage/OutfitStorage.h"
+#include "text/Normalize.h"
 
 using namespace style;
 
-static void printItem(const Clothing& c) {
+namespace {
+
+const char* kOutfitsPath = "data/outfits.json";
+
+void printItem(const Clothing& c) {
     std::cout << std::left << std::setw(6) << c.id << std::setw(22) << c.name
               << std::setw(11) << toString(c.category) << std::setw(8)
               << toString(c.color) << std::setw(9) << toString(c.style)
               << std::setw(8) << toString(c.season) << c.price << " TL\n";
 }
 
+void printList(const std::vector<Clothing>& v) {
+    if (v.empty()) {
+        std::cout << "Sonuc yok.\n";
+        return;
+    }
+    for (const Clothing& c : v) printItem(c);
+    std::cout << v.size() << " urun.\n";
+}
+
+bool toInt(const std::string& s, int& out) {
+    try {
+        std::size_t pos = 0;
+        out = std::stoi(s, &pos);
+        return pos == s.size();
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
+bool toDouble(const std::string& s, double& out) {
+    try {
+        std::size_t pos = 0;
+        out = std::stod(s, &pos);
+        return pos == s.size();
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
+std::vector<std::string> split(const std::string& line) {
+    std::istringstream in(line);
+    std::vector<std::string> tokens;
+    std::string t;
+    while (in >> t) tokens.push_back(t);
+    return tokens;
+}
+
+// tokens[from..] birlestirilir (bosluklu kombin adlari icin).
+std::string joinFrom(const std::vector<std::string>& t, std::size_t from) {
+    std::string out;
+    for (std::size_t i = from; i < t.size(); ++i) {
+        if (!out.empty()) out += ' ';
+        out += t[i];
+    }
+    return out;
+}
+
+struct App {
+    ClothingManager items;
+    RecommendationManager recommender{items};
+    OutfitManager outfits;
+    OutfitEditor editor;
+    ReviewQueue reviewQueue;
+};
+
+void printHelp() {
+    std::cout <<
+        "Komutlar:\n"
+        "  list | id <no> | ara <onek>\n"
+        "  filtre kategori=.. renk=.. stil=.. sezon=.. min=.. max=.. sirala=fiyat-artan|fiyat-azalan|ad\n"
+        "  oner <id> [seviye]\n"
+        "  kombin ekle <id> | cikar <id> | goster | temizle | geri | ileri\n"
+        "  kombin kaydet <ad> | ac <no> | kombinler\n"
+        "  sira ekle <id> | goster | isle\n"
+        "  yardim | cik\n";
+}
+
+void cmdFilter(const std::vector<std::string>& t, const App& app) {
+    CatalogFilter f;
+    for (std::size_t i = 1; i < t.size(); ++i) {
+        const std::size_t eq = t[i].find('=');
+        if (eq == std::string::npos) {
+            std::cout << "Gecersiz kosul: " << t[i] << " (anahtar=deger bekleniyor)\n";
+            return;
+        }
+        const std::string key = normalize(t[i].substr(0, eq));
+        const std::string val = t[i].substr(eq + 1);
+        bool ok = true;
+        if (key == "kategori") {
+            auto v = parseCategory(val);
+            if (v) f.category = *v; else ok = false;
+        } else if (key == "renk") {
+            auto v = parseColor(val);
+            if (v) f.color = *v; else ok = false;
+        } else if (key == "stil") {
+            auto v = parseStyle(val);
+            if (v) f.style = *v; else ok = false;
+        } else if (key == "sezon") {
+            auto v = parseSeason(val);
+            if (v) f.season = *v; else ok = false;
+        } else if (key == "min") {
+            double d = 0;
+            if (toDouble(val, d)) f.minPrice = d; else ok = false;
+        } else if (key == "max") {
+            double d = 0;
+            if (toDouble(val, d)) f.maxPrice = d; else ok = false;
+        } else if (key == "sirala") {
+            const std::string v = normalize(val);
+            if (v == "fiyat-artan") f.order = SortOrder::PriceAsc;
+            else if (v == "fiyat-azalan") f.order = SortOrder::PriceDesc;
+            else if (v == "ad") f.order = SortOrder::NameAsc;
+            else ok = false;
+        } else {
+            std::cout << "Bilinmeyen anahtar: " << key << "\n";
+            return;
+        }
+        if (!ok) {
+            std::cout << "Gecersiz deger: " << t[i] << "\n";
+            return;
+        }
+    }
+    printList(queryCatalog(app.items, f));
+}
+
+void cmdRecommend(const std::vector<std::string>& t, const App& app) {
+    int id = 0;
+    int level = 2;
+    if (t.size() < 2 || !toInt(t[1], id) || (t.size() > 2 && !toInt(t[2], level))) {
+        std::cout << "Kullanim: oner <id> [seviye]\n";
+        return;
+    }
+    const Clothing* start = app.items.findById(id);
+    if (!start) {
+        std::cout << "Urun bulunamadi.\n";
+        return;
+    }
+    std::cout << "Secilen: ";
+    printItem(*start);
+    auto list = app.recommender.recommend(id, level, 20);
+    if (list.empty()) std::cout << "Uyumlu urun bulunamadi.\n";
+    for (const auto& s : list) {
+        std::cout << "  [seviye " << s.level << "] ";
+        printItem(s.item);
+    }
+}
+
+void showEditor(const App& app) {
+    if (app.editor.empty()) {
+        std::cout << "Kombin bos.\n";
+        return;
+    }
+    double total = 0;
+    for (int id : app.editor.items()) {
+        if (const Clothing* c = app.items.findById(id)) {
+            printItem(*c);
+            total += c->price;
+        } else {
+            std::cout << id << "  (silinmis urun)\n";
+        }
+    }
+    std::cout << "Toplam: " << total << " TL\n";
+}
+
+void cmdOutfit(const std::vector<std::string>& t, App& app) {
+    if (t.size() < 2) {
+        std::cout << "Kullanim: kombin ekle|cikar|goster|temizle|geri|ileri|kaydet|ac|kombinler\n";
+        return;
+    }
+    const std::string& sub = t[1];
+    int id = 0;
+
+    if (sub == "ekle") {
+        if (t.size() < 3 || !toInt(t[2], id)) { std::cout << "Kullanim: kombin ekle <id>\n"; return; }
+        if (!app.items.findById(id)) { std::cout << "Urun bulunamadi.\n"; return; }
+        if (!app.editor.add(id)) { std::cout << "Urun zaten kombinde.\n"; return; }
+        showEditor(app);
+    } else if (sub == "cikar") {
+        if (t.size() < 3 || !toInt(t[2], id)) { std::cout << "Kullanim: kombin cikar <id>\n"; return; }
+        if (!app.editor.remove(id)) { std::cout << "Urun kombinde degil.\n"; return; }
+        showEditor(app);
+    } else if (sub == "goster") {
+        showEditor(app);
+    } else if (sub == "temizle") {
+        if (!app.editor.clear()) std::cout << "Kombin zaten bos.\n";
+        else std::cout << "Kombin temizlendi (geri alinabilir).\n";
+    } else if (sub == "geri") {
+        if (!app.editor.undo()) { std::cout << "Geri alinacak islem yok.\n"; return; }
+        showEditor(app);
+    } else if (sub == "ileri") {
+        if (!app.editor.redo()) { std::cout << "Ileri alinacak islem yok.\n"; return; }
+        showEditor(app);
+    } else if (sub == "kaydet") {
+        const std::string name = joinFrom(t, 2);
+        const int newId = app.outfits.create(name, app.editor.items());
+        if (newId == 0) {
+            std::cout << "Kaydedilemedi (ad ve en az bir urun gerekli).\n";
+            return;
+        }
+        if (OutfitStorage::save(kOutfitsPath, app.outfits))
+            std::cout << "Kombin #" << newId << " kaydedildi.\n";
+        else
+            std::cout << "Kombin bellekte tutuldu ama dosyaya yazilamadi.\n";
+    } else if (sub == "ac") {
+        if (t.size() < 3 || !toInt(t[2], id)) { std::cout << "Kullanim: kombin ac <no>\n"; return; }
+        const Outfit* o = app.outfits.find(id);
+        if (!o) { std::cout << "Kombin bulunamadi.\n"; return; }
+        app.editor.clear();
+        for (int cid : o->clothingIds) {
+            if (app.items.findById(cid)) app.editor.add(cid);
+        }
+        std::cout << "\"" << o->name << "\" acildi.\n";
+        showEditor(app);
+    } else if (sub == "kombinler") {
+        if (app.outfits.empty()) { std::cout << "Kayitli kombin yok.\n"; return; }
+        for (const Outfit& o : app.outfits.all()) {
+            std::cout << "#" << o.outfitId << "  " << o.name << "  ["
+                      << o.clothingIds.size() << " urun, "
+                      << OutfitManager::totalPrice(o, app.items) << " TL";
+            const std::size_t missing = OutfitManager::missingCount(o, app.items);
+            if (missing > 0) std::cout << ", " << missing << " eksik";
+            std::cout << "]\n";
+        }
+    } else {
+        std::cout << "Bilinmeyen kombin komutu.\n";
+    }
+}
+
+void cmdQueue(const std::vector<std::string>& t, App& app) {
+    if (t.size() < 2) {
+        std::cout << "Kullanim: sira ekle <id> | goster | isle\n";
+        return;
+    }
+    const std::string& sub = t[1];
+    int id = 0;
+    if (sub == "ekle") {
+        if (t.size() < 3 || !toInt(t[2], id)) { std::cout << "Kullanim: sira ekle <id>\n"; return; }
+        if (!app.items.findById(id)) { std::cout << "Urun bulunamadi.\n"; return; }
+        if (!app.reviewQueue.enqueue(id)) { std::cout << "Urun zaten sirada.\n"; return; }
+        std::cout << "Siraya eklendi (" << app.reviewQueue.size() << " urun bekliyor).\n";
+    } else if (sub == "goster") {
+        if (app.reviewQueue.empty()) { std::cout << "Sira bos.\n"; return; }
+        int n = 1;
+        for (int qid : app.reviewQueue.items()) {
+            std::cout << n++ << ". ";
+            if (const Clothing* c = app.items.findById(qid)) printItem(*c);
+            else std::cout << qid << " (silinmis)\n";
+        }
+    } else if (sub == "isle") {
+        auto next = app.reviewQueue.processNext(app.items);
+        if (!next) { std::cout << "Sira bos.\n"; return; }
+        std::cout << "Simdi inceleniyor: ";
+        printItem(*next);
+        std::cout << "Kalan: " << app.reviewQueue.size() << "\n";
+    } else {
+        std::cout << "Bilinmeyen sira komutu.\n";
+    }
+}
+
+}  // namespace
+
 int main(int argc, char* argv[]) {
     const std::string path = argc > 1 ? argv[1] : "data/clothes.json";
-
     std::cout << "Style Studio v" << version() << "\n";
 
     ClothingCollection collection;
@@ -32,31 +295,45 @@ int main(int argc, char* argv[]) {
         std::cout << "Atlanan kayit #" << s.index << ": " << s.reason << "\n";
     }
 
-    ClothingManager manager;
-    manager.loadFrom(collection);
-    std::cout << manager.size() << " urun yuklendi.\n\n"
-              << "Komutlar: list | id <no> | ara <onek> | cik\n";
+    App app;
+    app.items.loadFrom(collection);
+    app.recommender.rebuild();
+    std::cout << app.items.size() << " urun yuklendi, "
+              << app.recommender.graph().edgeCount() << " uyumluluk baglantisi kuruldu.\n";
+
+    LoadReport outfitReport = OutfitStorage::load(kOutfitsPath, app.outfits);
+    if (outfitReport.ok()) {
+        std::cout << app.outfits.size() << " kayitli kombin yuklendi.\n";
+        for (const SkippedRecord& s : outfitReport.skipped)
+            std::cout << "Atlanan kombin #" << s.index << ": " << s.reason << "\n";
+    } else if (outfitReport.fatalError.rfind("dosya acilamadi", 0) != 0) {
+        std::cout << "Kombin dosyasi okunamadi: " << outfitReport.fatalError << "\n";
+    }
+
+    printHelp();
 
     std::string line;
     while (std::cout << "> " && std::getline(std::cin, line)) {
-        if (line == "cik") break;
+        const std::vector<std::string> t = split(line);
+        if (t.empty()) continue;
+        const std::string& cmd = t[0];
 
-        if (line == "list") {
-            for (const Clothing& c : manager.all()) printItem(c);
-        } else if (line.rfind("id ", 0) == 0) {
-            try {
-                const Clothing* c = manager.findById(std::stoi(line.substr(3)));
-                if (c) printItem(*c); else std::cout << "Bulunamadi.\n";
-            } catch (const std::exception&) {
-                std::cout << "Gecersiz numara.\n";
-            }
-        } else if (line.rfind("ara ", 0) == 0) {
-            auto found = manager.suggestByName(line.substr(4), 10);
-            if (found.empty()) std::cout << "Sonuc yok.\n";
-            for (const Clothing& c : found) printItem(c);
-        } else if (!line.empty()) {
-            std::cout << "Bilinmeyen komut.\n";
-        }
+        if (cmd == "cik") break;
+        else if (cmd == "yardim") printHelp();
+        else if (cmd == "list") printList(app.items.all());
+        else if (cmd == "id") {
+            int id = 0;
+            if (t.size() < 2 || !toInt(t[1], id)) std::cout << "Kullanim: id <no>\n";
+            else if (const Clothing* c = app.items.findById(id)) printItem(*c);
+            else std::cout << "Bulunamadi.\n";
+        } else if (cmd == "ara") {
+            printList(app.items.suggestByName(joinFrom(t, 1), 10));
+        } else if (cmd == "filtre") cmdFilter(t, app);
+        else if (cmd == "oner") cmdRecommend(t, app);
+        else if (cmd == "kombin") cmdOutfit(t, app);
+        else if (cmd == "kombinler") cmdOutfit({"kombin", "kombinler"}, app);
+        else if (cmd == "sira") cmdQueue(t, app);
+        else std::cout << "Bilinmeyen komut. 'yardim' yaz.\n";
     }
     return 0;
 }
