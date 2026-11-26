@@ -37,6 +37,12 @@ public:
     // Baştaki eleman, boşsa nullptr. Sonraki dequeue'ya kadar geçerli.
     const T* front() const { return head_ ? &head_->value : nullptr; }
 
+    // Baştan sona fn(const T&) uygular, kuyruğu değiştirmez. Zaman: O(n).
+    template <typename Func>
+    void forEach(Func fn) const {
+        for (const Node* n = head_; n; n = n->next) fn(n->value);
+    }
+
     std::size_t size() const { return size_; }
     bool empty() const { return size_ == 0; }
 

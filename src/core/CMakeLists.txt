@@ -3,6 +3,7 @@ add_library(style_core STATIC
     models/Enums.cpp
     models/ClothingCollection.cpp
     storage/JsonManager.cpp
+    storage/OutfitStorage.cpp
     text/Normalize.cpp
     managers/ClothingManager.cpp
 )
