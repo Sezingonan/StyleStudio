@@ -1,9 +1,16 @@
+#ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 #include <cstddef>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
+
 
 #include "Version.h"
 #include "managers/CatalogQuery.h"
@@ -23,8 +30,19 @@ namespace {
 
 const char* kOutfitsPath = "data/outfits.json";
 
+// UTF-8 metni karakter sayısına göre boşlukla doldurur (setw bayt sayar).
+std::string pad(const std::string& s, std::size_t width) {
+    std::size_t len = 0;
+    for (unsigned char ch : s) {
+        if ((ch & 0xC0) != 0x80) ++len;  // devam baytlarını sayma
+    }
+    std::string out = s;
+    if (len < width) out.append(width - len, ' ');
+    return out;
+}
+
 void printItem(const Clothing& c) {
-    std::cout << std::left << std::setw(6) << c.id << std::setw(22) << c.name
+    std::cout << std::left << std::setw(6) << c.id << pad(c.name, 30)
               << std::setw(11) << toString(c.category) << std::setw(8)
               << toString(c.color) << std::setw(9) << toString(c.style)
               << std::setw(8) << toString(c.season) << c.price << " TL\n";
@@ -281,6 +299,10 @@ void cmdQueue(const std::vector<std::string>& t, App& app) {
 }  // namespace
 
 int main(int argc, char* argv[]) {
+	#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);  // Türkçe karakterler bozulmasın
+    SetConsoleCP(CP_UTF8);        // Türkçe karakterli komut yazabilmek için
+#endif
     const std::string path = argc > 1 ? argv[1] : "data/clothes.json";
     std::cout << "Style Studio v" << version() << "\n";
 

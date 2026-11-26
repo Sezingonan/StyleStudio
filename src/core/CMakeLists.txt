@@ -4,6 +4,7 @@ add_library(style_core STATIC
     models/ClothingCollection.cpp
     storage/JsonManager.cpp
     storage/OutfitStorage.cpp
+    storage/SampleData.cpp
     text/Normalize.cpp
     managers/ClothingManager.cpp
 )
