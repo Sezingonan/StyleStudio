@@ -31,6 +31,13 @@ public:
     // Tüm ürünler, ID'ye göre artan sırada (AVL in-order).
     std::vector<Clothing> all() const;
 
+    // Her ürüne ID sırasıyla fn(const Clothing&) uygular, kopyalama yapmaz.
+    // fn içinde add/remove çağrılmamalıdır.
+    template <typename Func>
+    void forEach(Func fn) const {
+        store_.inOrder([&fn](int, const Clothing& c) { fn(c); });
+    }
+
     // Koleksiyondaki ürünleri ekler. Başarıyla eklenen sayısını döner.
     std::size_t loadFrom(const ClothingCollection& collection);
 
