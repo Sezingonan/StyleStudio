@@ -20,6 +20,7 @@
 #include "managers/CatalogQuery.h"
 #include "managers/ClothingManager.h"
 #include "managers/OutfitEditor.h"
+#include "managers/OutfitRules.h"
 #include "managers/OutfitManager.h"
 #include "managers/RecommendationManager.h"
 #include "managers/ReviewQueue.h"
@@ -235,7 +236,12 @@ void cmdOutfit(const std::vector<std::string>& t, App& app) {
     if (sub == "ekle") {
         if (t.size() < 3 || !toInt(t[2], id)) { std::cout << "Kullanim: kombin ekle <id>\n"; return; }
         if (!app.items.findById(id)) { std::cout << "Urun bulunamadi.\n"; return; }
-        if (!app.editor.add(id)) { std::cout << "Urun zaten kombinde.\n"; return; }
+        const PlaceResult pr = placeInOutfit(app.editor, app.items, id);
+        if (pr == PlaceResult::Rejected) {
+            std::cout << "Eklenemedi: urun zaten kombinde ya da aksesuar siniri (3) dolu.\n";
+            return;
+        }
+        if (pr == PlaceResult::Replaced) std::cout << "Ayni kategorideki urunle degistirildi.\n";
         showEditor(app);
     } else if (sub == "cikar") {
         if (t.size() < 3 || !toInt(t[2], id)) { std::cout << "Kullanim: kombin cikar <id>\n"; return; }

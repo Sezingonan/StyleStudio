@@ -5,6 +5,7 @@
 
 #include "managers/ClothingManager.h"
 #include "managers/OutfitEditor.h"
+#include "managers/OutfitManager.h"
 
 class QComboBox;
 class QDoubleSpinBox;
@@ -13,6 +14,7 @@ class QLabel;
 class QLineEdit;
 class QStringListModel;
 class QWidget;
+class OutfitPanel;
 
 // Katalog ekranı: arama, filtre, sıralama ve ürün kartları ızgarası.
 class CatalogWindow : public QMainWindow {
@@ -31,6 +33,8 @@ private:
     QString sourceDir_;
     style::ClothingManager items_;
     style::OutfitEditor editor_;  // üzerinde çalışılan kombin
+    style::OutfitManager outfits_;  // kayıtlı kombinler
+    OutfitPanel* panel_ = nullptr;
 
     QLineEdit* search_ = nullptr;
     QComboBox* category_ = nullptr;

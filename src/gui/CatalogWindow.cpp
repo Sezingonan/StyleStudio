@@ -1,8 +1,8 @@
 #include "CatalogWindow.h"
 
-#include <QColor>
 #include <QComboBox>
 #include <QCompleter>
+#include <QDockWidget>
 #include <QDoubleSpinBox>
 #include <QFrame>
 #include <QGridLayout>
@@ -22,42 +22,18 @@
 #include <vector>
 
 #include "managers/CatalogQuery.h"
+#include "managers/OutfitRules.h"
 #include "models/ClothingCollection.h"
 #include "storage/JsonManager.h"
+#include "GuiCommon.h"
+#include "OutfitPanel.h"
+#include "storage/OutfitStorage.h"
 
 using namespace style;
 
+using namespace gui;
+
 namespace {
-
-struct CatLabel { Category value; const char* text; };
-const CatLabel kCats[] = {
-    {Category::Top, "Üst giyim"},   {Category::Bottom, "Alt giyim"},
-    {Category::Outerwear, "Dış giyim"}, {Category::Shoes, "Ayakkabı"},
-    {Category::Bag, "Çanta"},       {Category::Accessory, "Aksesuar"},
-};
-
-struct ColLabel { Color value; const char* text; QRgb rgb; };
-const ColLabel kCols[] = {
-    {Color::White, "Beyaz", 0xF2EFEA},   {Color::Black, "Siyah", 0x1E1E1E},
-    {Color::Gray, "Gri", 0x9A9A9A},      {Color::Beige, "Bej", 0xD8C3A5},
-    {Color::Brown, "Kahverengi", 0x6B4A2F}, {Color::Blue, "Mavi", 0x4A7FB5},
-    {Color::Navy, "Lacivert", 0x1F2D4D}, {Color::Red, "Kırmızı", 0xB5382E},
-    {Color::Green, "Yeşil", 0x4F7F5A},   {Color::Pink, "Pembe", 0xE3A3B5},
-    {Color::Yellow, "Sarı", 0xE2C044},   {Color::Other, "Diğer", 0xB0A89C},
-};
-
-QString catText(Category c) {
-    for (const auto& e : kCats) if (e.value == c) return e.text;
-    return "?";
-}
-QString colText(Color c) {
-    for (const auto& e : kCols) if (e.value == c) return e.text;
-    return "?";
-}
-QRgb colRgb(Color c) {
-    for (const auto& e : kCols) if (e.value == c) return e.rgb;
-    return 0xB0A89C;
-}
 
 const int kMaxCards = 60;
 const int kColumns = 4;
@@ -73,7 +49,7 @@ CatalogWindow::CatalogWindow(const QString& sourceDir, QWidget* parent)
     if (report.ok()) items_.loadFrom(collection);
 
     setWindowTitle("Style Studio");
-    resize(1000, 750);
+    resize(1400, 780);
     setStyleSheet(
         "QMainWindow, QWidget#host { background-color: #F5F0E8; }"
         "QLabel { color: #3B2A20; }"
@@ -83,6 +59,10 @@ CatalogWindow::CatalogWindow(const QString& sourceDir, QWidget* parent)
         "QPushButton { background: #3B2A20; color: #F5F0E8; border: none;"
         "  border-radius: 6px; padding: 6px 10px; }"
         "QPushButton:hover { background: #6B4A2F; }"
+        "QListWidget { background: #FBF8F2; color: #3B2A20; border: 1px solid #D9CBB8;"
+        "  border-radius: 6px; }"
+        "QListWidget::item:selected { background: #D9CBB8; color: #3B2A20; }"
+        "QPushButton:disabled { background: #BFB3A3; color: #F5F0E8; }"
         "QScrollArea { border: none; }");
 
     QWidget* central = new QWidget;
@@ -152,6 +132,18 @@ CatalogWindow::CatalogWindow(const QString& sourceDir, QWidget* parent)
     root->addWidget(scroll, 1);
 
     setCentralWidget(central);
+
+    // Kayıtlı kombinleri yükle (dosya henüz yoksa boş başlanır)
+    OutfitStorage::load((sourceDir + "/data/outfits.json").toStdString(), outfits_);
+
+    // Sağ taraftaki kombin panosu
+    panel_ = new OutfitPanel(items_, editor_, outfits_, sourceDir_);
+    QDockWidget* dock = new QDockWidget("Kombin", this);
+    dock->setWidget(panel_);
+    dock->setFeatures(QDockWidget::NoDockWidgetFeatures);
+    addDockWidget(Qt::RightDockWidgetArea, dock);
+    connect(panel_, &OutfitPanel::message, this,
+            [this](const QString& m) { statusBar()->showMessage(m); });
 
     // --- Olaylar ---
     connect(search_, &QLineEdit::textChanged, this, &CatalogWindow::updateSuggestions);
@@ -227,20 +219,7 @@ void CatalogWindow::refresh() {
 }
 
 QPixmap CatalogWindow::cardPixmap(const Clothing& c) const {
-    const int w = 170, h = 210;
-    QPixmap photo(sourceDir_ + "/" + QString::fromStdString(c.imagePath));
-    if (!photo.isNull()) {
-        return photo.scaled(w, h, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    }
-    // Fotoğraf yok: ürünün renginde yer tutucu
-    QPixmap pm(w, h);
-    const QColor bg(colRgb(c.color));
-    pm.fill(bg);
-    QPainter p(&pm);
-    p.setPen(bg.lightness() < 128 ? QColor("#F5F0E8") : QColor("#3B2A20"));
-    p.drawText(QRect(8, 8, w - 16, h - 16), Qt::AlignCenter | Qt::TextWordWrap,
-               QString::fromStdString(c.name));
-    return pm;
+    return productPixmap(c, sourceDir_, 170, 210);
 }
 
 QWidget* CatalogWindow::makeCard(const Clothing& c) {
@@ -265,10 +244,19 @@ QWidget* CatalogWindow::makeCard(const Clothing& c) {
     QPushButton* add = new QPushButton("Kombine ekle");
     const int id = c.id;
     connect(add, &QPushButton::clicked, this, [this, id] {
-        if (editor_.add(id))
-            statusBar()->showMessage(QString("Kombine eklendi (%1 ürün)").arg(editor_.size()));
-        else
-            statusBar()->showMessage("Bu ürün zaten kombinde");
+        switch (placeInOutfit(editor_, items_, id)) {
+            case PlaceResult::Added:
+                panel_->refresh();
+                statusBar()->showMessage(QString("Kombine eklendi (%1 ürün)").arg(editor_.size()));
+                break;
+            case PlaceResult::Replaced:
+                panel_->refresh();
+                statusBar()->showMessage("Aynı kategorideki ürünle değiştirildi");
+                break;
+            case PlaceResult::Rejected:
+                statusBar()->showMessage("Eklenemedi: ürün zaten kombinde ya da aksesuar sınırı (3) dolu");
+                break;
+        }
     });
     lay->addWidget(add);
     return card;
