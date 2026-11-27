@@ -5,3 +5,4 @@ out/
 *.user
 CMakeUserPresets.json
 build_release/
+build_gui/

@@ -17,3 +17,11 @@ add_subdirectory(src/core)
 add_subdirectory(src/cli)
 add_subdirectory(src/tools)
 add_subdirectory(tests)
+
+# Qt isteğe bağlı: bulunamazsa GUI atlanır, geri kalan her şey derlenir.
+find_package(Qt6 QUIET COMPONENTS Widgets)
+if(Qt6_FOUND)
+    add_subdirectory(src/gui)
+else()
+    message(STATUS "Qt6 bulunamadi, GUI atlandi (CMAKE_PREFIX_PATH ile Qt yolunu ver)")
+endif()

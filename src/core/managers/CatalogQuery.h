@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 #include <optional>
 #include <vector>
 
@@ -71,11 +72,21 @@ inline std::vector<Clothing> queryCatalog(const ClothingManager& items,
         case SortOrder::PriceDesc:
             quickSort(result, [](const Clothing& a, const Clothing& b) { return a.price > b.price; });
             break;
-        case SortOrder::NameAsc:
-            mergeSort(result, [](const Clothing& a, const Clothing& b) {
-                return normalize(a.name) < normalize(b.name);
-            });
+
+        case SortOrder::NameAsc: {
+            // normalize'ı her karşılaştırmada değil, ürün başına bir kez çalıştır.
+            struct Keyed {
+                std::string key;
+                Clothing item;
+            };
+            std::vector<Keyed> keyed;
+            keyed.reserve(result.size());
+            for (const Clothing& c : result) keyed.push_back({normalize(c.name), c});
+            mergeSort(keyed, [](const Keyed& a, const Keyed& b) { return a.key < b.key; });
+            for (std::size_t i = 0; i < keyed.size(); ++i) result[i] = keyed[i].item;
             break;
+        }
+
         case SortOrder::None:
             // Fiyat filtresi pool'u fiyata göre sıraladıysa ID sırasına dön.
             if (f.minPrice || f.maxPrice) {
