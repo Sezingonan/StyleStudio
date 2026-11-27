@@ -121,6 +121,17 @@ int main() {
         CHECK(!r2.onAdded(777));  // manager'da yok
     }
 
+    // Kategoriye göre gruplu öneri: Bottom önce, sonra Shoes
+    {
+        CHECK((sortedIds(r.recommendByCategory(1, 1, 1)) == Ids{2, 8}));
+        auto g = r.recommendByCategory(1, 2, 2);
+        CHECK_EQ(g.size(), 3u);                       // 2 ve 3 (Bottom), 8 (Shoes)
+        CHECK(g[0].item.category == Category::Bottom);
+        CHECK(g[2].item.category == Category::Shoes);
+        CHECK(r.recommendByCategory(1, 2, 0).empty());
+        CHECK(r.recommendByCategory(999).empty());
+    }
+
     // Silme: kenarlar temizlenmeli
     {
         CHECK(m.remove(8));

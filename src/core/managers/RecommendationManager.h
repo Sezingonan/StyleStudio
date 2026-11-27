@@ -66,6 +66,28 @@ public:
         }
         return result;
     }
+    // recommend() sonucunu kategoriye göre gruplar (Top, Bottom, Outerwear,
+    // Shoes, Bag, Accessory sırasıyla); her kategoriden en fazla perCategory
+    // öneri alır. Kategori içinde BFS sırası (önce yakın seviye) korunur.
+    std::vector<Suggestion> recommendByCategory(int id, int maxLevel = 2,
+                                                std::size_t perCategory = 3) const {
+        std::vector<Suggestion> result;
+        if (perCategory == 0) return result;
+        const std::vector<Suggestion> all =
+            recommend(id, maxLevel, static_cast<std::size_t>(-1));  // limitsiz
+        const Category order[] = {Category::Top,   Category::Bottom, Category::Outerwear,
+                                  Category::Shoes, Category::Bag,    Category::Accessory};
+        for (Category cat : order) {
+            std::size_t taken = 0;
+            for (const Suggestion& s : all) {
+                if (s.item.category == cat && taken < perCategory) {
+                    result.push_back(s);
+                    ++taken;
+                }
+            }
+        }
+        return result;
+    }
 
     const Graph& graph() const { return graph_; }
 

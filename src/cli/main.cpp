@@ -176,10 +176,17 @@ void cmdRecommend(const std::vector<std::string>& t, const App& app) {
     }
     std::cout << "Secilen: ";
     printItem(*start);
-    auto list = app.recommender.recommend(id, level, 20);
+        auto list = app.recommender.recommendByCategory(id, level, 3);
     if (list.empty()) std::cout << "Uyumlu urun bulunamadi.\n";
+    Category current = Category::Top;
+    bool first = true;
     for (const auto& s : list) {
-        std::cout << "  [seviye " << s.level << "] ";
+        if (first || s.item.category != current) {
+            std::cout << "  " << toString(s.item.category) << ":\n";
+            current = s.item.category;
+            first = false;
+        }
+        std::cout << "    [seviye " << s.level << "] ";
         printItem(s.item);
     }
 }
