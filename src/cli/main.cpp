@@ -5,6 +5,7 @@
 #endif
 
 #include <cstddef>
+#include <cmath>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -13,6 +14,8 @@
 
 
 #include "Version.h"
+#include "algorithms/BinarySearch.h"
+#include "algorithms/QuickSort.h"
 #include "managers/CatalogQuery.h"
 #include "managers/ClothingManager.h"
 #include "managers/OutfitEditor.h"
@@ -109,6 +112,8 @@ void printHelp() {
         "  list | id <no> | ara <onek>\n"
         "  filtre kategori=.. renk=.. stil=.. sezon=.. min=.. max=.. sirala=fiyat-artan|fiyat-azalan|ad\n"
         "  oner <id> [seviye]\n"
+        "  fiyat <tutar> | fiyat <min> <max>   (Binary Search)\n"
+        "  bilgi                               (AVL yuksekligi, graf)\n"
         "  kombin ekle <id> | cikar <id> | goster | temizle | geri | ileri\n"
         "  kombin kaydet <ad> | ac <no> | kombinler\n"
         "  sira ekle <id> | goster | isle\n"
@@ -159,7 +164,13 @@ void cmdFilter(const std::vector<std::string>& t, const App& app) {
             return;
         }
     }
-    printList(queryCatalog(app.items, f));
+        printList(queryCatalog(app.items, f));
+    if (f.minPrice || f.maxPrice)
+        std::cout << "[Fiyat araligi: Quick Sort + Binary Search]\n";
+    if (f.order == SortOrder::PriceAsc || f.order == SortOrder::PriceDesc)
+        std::cout << "[Siralama: Quick Sort]\n";
+    else if (f.order == SortOrder::NameAsc)
+        std::cout << "[Siralama: Merge Sort (kararli)]\n";
 }
 
 void cmdRecommend(const std::vector<std::string>& t, const App& app) {
@@ -302,7 +313,48 @@ void cmdQueue(const std::vector<std::string>& t, App& app) {
         std::cout << "Bilinmeyen sira komutu.\n";
     }
 }
+void cmdInfo(const App& app) {
+    const std::size_t n = app.items.size();
+    const int bound = static_cast<int>(1.44 * std::log2(static_cast<double>(n) + 2.0));
+    std::cout << "Urun sayisi        : " << n << "\n"
+              << "AVL yuksekligi     : " << app.items.treeHeight()
+              << "  (teorik ust sinir ~" << bound << ", dengesiz agacta en kotu "
+              << n << ")\n"
+              << "Graf               : " << app.recommender.graph().nodeCount()
+              << " dugum, " << app.recommender.graph().edgeCount() << " kenar\n"
+              << "Kayitli kombin     : " << app.outfits.size() << "\n"
+              << "Inceleme sirasi    : " << app.reviewQueue.size() << "\n";
+}
 
+// fiyat <tutar>  ya da  fiyat <min> <max>
+void cmdPrice(const std::vector<std::string>& t, const App& app) {
+    double lo = 0, hi = 0;
+    if (t.size() < 2 || t.size() > 3 || !toDouble(t[1], lo) ||
+        (t.size() == 3 && !toDouble(t[2], hi))) {
+        std::cout << "Kullanim: fiyat <tutar>  veya  fiyat <min> <max>\n";
+        return;
+    }
+    if (t.size() == 2) hi = lo;
+    if (lo > hi) {
+        std::cout << "min, max'tan buyuk olamaz.\n";
+        return;
+    }
+    std::vector<Clothing> v = app.items.all();
+    quickSort(v, detail::PriceLess{});
+    if (!isSorted(v, detail::PriceLess{})) {
+        std::cout << "Siralama dogrulanamadi.\n";
+        return;
+    }
+    const std::size_t first = lowerBound(v, lo, detail::PriceLess{});
+    const std::size_t last = upperBound(v, hi, detail::PriceLess{});
+    std::cout << "Quick Sort ile fiyata gore siralandi (" << v.size()
+              << " urun). Binary Search: alt sinir indeksi " << first
+              << ", ust sinir indeksi " << last << " -> " << (last - first)
+              << " urun.\n";
+    const std::size_t shown = std::min<std::size_t>(last - first, 20);
+    for (std::size_t i = 0; i < shown; ++i) printItem(v[first + i]);
+    if (last - first > shown) std::cout << "... (ilk 20 gosterildi)\n";
+}
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -359,6 +411,8 @@ int main(int argc, char* argv[]) {
             printList(app.items.suggestByName(joinFrom(t, 1), 10));
         } else if (cmd == "filtre") cmdFilter(t, app);
         else if (cmd == "oner") cmdRecommend(t, app);
+        else if (cmd == "bilgi") cmdInfo(app);
+        else if (cmd == "fiyat") cmdPrice(t, app);
         else if (cmd == "kombin") cmdOutfit(t, app);
         else if (cmd == "kombinler") cmdOutfit({"kombin", "kombinler"}, app);
         else if (cmd == "sira") cmdQueue(t, app);

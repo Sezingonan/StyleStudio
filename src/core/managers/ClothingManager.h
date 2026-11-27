@@ -44,6 +44,9 @@ public:
     std::size_t size() const { return store_.size(); }
     bool empty() const { return store_.empty(); }
 
+    // AVL ağacının yüksekliği (denge kanıtı için).
+    int treeHeight() const { return store_.height(); }
+
 private:
     AVLTree<int, Clothing> store_;  // id -> ürün (tek kayıt)
     Trie nameIndex_;                // ad -> id
