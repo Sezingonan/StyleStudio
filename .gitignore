@@ -4,3 +4,4 @@ out/
 .idea/
 *.user
 CMakeUserPresets.json
+build_release/
