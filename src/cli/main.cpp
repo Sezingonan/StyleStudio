@@ -5,6 +5,7 @@
 #endif
 
 #include <cstddef>
+#include <algorithm>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
@@ -51,13 +52,17 @@ void printItem(const Clothing& c) {
               << std::setw(8) << toString(c.season) << c.price << " TL\n";
 }
 
-void printList(const std::vector<Clothing>& v) {
+void printList(const std::vector<Clothing>& v, std::size_t maxRows = 25) {
     if (v.empty()) {
         std::cout << "Sonuc yok.\n";
         return;
     }
-    for (const Clothing& c : v) printItem(c);
-    std::cout << v.size() << " urun.\n";
+    const std::size_t shown = std::min(v.size(), maxRows);
+    for (std::size_t i = 0; i < shown; ++i) printItem(v[i]);
+    if (v.size() > shown)
+        std::cout << "... ilk " << shown << " urun gosterildi, toplam " << v.size() << ".\n";
+    else
+        std::cout << v.size() << " urun.\n";
 }
 
 bool toInt(const std::string& s, int& out) {
@@ -400,8 +405,10 @@ int main(int argc, char* argv[]) {
         const std::string& cmd = t[0];
 
         if (cmd == "cik") break;
-        else if (cmd == "yardim") printHelp();
-        else if (cmd == "list") printList(app.items.all());
+        else if (cmd == "yardim") printHelp();        
+	else if (cmd == "list")
+            printList(app.items.all(),
+                      (t.size() > 1 && t[1] == "tum") ? static_cast<std::size_t>(-1) : 25);
         else if (cmd == "id") {
             int id = 0;
             if (t.size() < 2 || !toInt(t[1], id)) std::cout << "Kullanim: id <no>\n";

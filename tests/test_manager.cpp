@@ -124,6 +124,33 @@ int main() {
         CHECK_EQ(m.size(), 3u);
     }
 
+    // Kelime başı araması: adın herhangi bir kelimesiyle bulunabilmeli
+    {
+        ClothingManager m;
+        m.add(make(1, "Siyah Pantolon"));
+        m.add(make(2, "Gri Palazzo Pantolon"));
+        m.add(make(3, "Beyaz Tişört"));
+        CHECK((idsOf(m.suggestByName("pantolon", 10)) == Ids{1, 2}));
+        CHECK((idsOf(m.suggestByName("pa", 10)) == Ids{2, 1}));   // 2 iki yoldan gelir, tek sayılır
+        CHECK((idsOf(m.suggestByName("pa", 1)) == Ids{2}));
+        CHECK((idsOf(m.suggestByName("tis", 10)) == Ids{3}));
+        CHECK((idsOf(m.suggestByName("siyah pan", 10)) == Ids{1}));
+
+        // Silinen ürünün kelime anahtarları da temizlenmeli
+        CHECK(m.remove(1));
+        CHECK((idsOf(m.suggestByName("pantolon", 10)) == Ids{2}));
+        CHECK(m.suggestByName("siyah", 10).empty());
+    }
+
+    // Tekrarlayan kelime: aynı ürün bir kez dönmeli, k kadar benzersiz ürün bulunabilmeli
+    {
+        ClothingManager m;
+        m.add(make(2, "Gri Palazzo Pantolon"));
+        m.add(make(4, "Gri Gri Pantolon"));
+        CHECK((idsOf(m.suggestByName("gri", 3)) == Ids{4, 2}));
+        CHECK((idsOf(m.suggestByName("gri", 1)) == Ids{4}));
+    }
+
     // Büyük test: 1000 ürün ekle, çiftleri sil, tutarlılık korunmalı
     {
         ClothingManager m;
